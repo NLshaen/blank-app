@@ -22,8 +22,8 @@ DOSSIER = Path("images")
 DOSSIER.mkdir(exist_ok=True)
 DB = "lucas_art.db"
 
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
-EMAIL = os.environ.get("CONTACT_EMAIL", "")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "test123")
+EMAIL = os.environ.get("CONTACT_EMAIL", "admin@gmail.com")
 
 # ==========================================
 # BASE DE DONNEES
