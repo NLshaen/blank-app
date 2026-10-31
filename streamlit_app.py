@@ -1,273 +1,410 @@
 import streamlit as st
 import sqlite3
 import os
+import uuid
+import html
 from pathlib import Path
+from urllib.parse import quote
 from PIL import Image
 
-# CONFIGURATION
+# ==========================================
+# LUCAS ART - GALERIE DE PEINTURE
+# ==========================================
+
 st.set_page_config(
-    page_title="Ma Galerie d'Art",
+    page_title="LUCAS ART | Galerie de peinture",
     page_icon="🎨",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
 DOSSIER = Path("images")
 DOSSIER.mkdir(exist_ok=True)
+DB = "lucas_art.db"
 
-DB = "galerie.db"
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "test123")
-CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL", "admin@gmail.com")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+EMAIL = os.environ.get("CONTACT_EMAIL", "")
 
-# BASE DE DONNÉES
-def connexion():
+# ==========================================
+# BASE DE DONNEES
+# ==========================================
+
+def db():
     return sqlite3.connect(DB)
 
 def initialiser():
-    with connexion() as con:
+    with db() as con:
         con.execute("""
-            CREATE TABLE IF NOT EXISTS tableaux (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                titre TEXT,
-                description TEXT,
-                technique TEXT,
-                dimensions TEXT,
-                annee TEXT,
-                prix TEXT,
-                image TEXT
-            )
+        CREATE TABLE IF NOT EXISTS oeuvres (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            titre TEXT NOT NULL,
+            description TEXT,
+            technique TEXT,
+            dimensions TEXT,
+            annee TEXT,
+            prix TEXT,
+            image TEXT NOT NULL
+        )
         """)
 
-def recuperer_tableaux():
-    with connexion() as con:
+def liste_oeuvres():
+    with db() as con:
         return con.execute(
-            "SELECT * FROM tableaux ORDER BY id DESC"
+            "SELECT * FROM oeuvres ORDER BY id DESC"
         ).fetchall()
 
-def ajouter_tableau(titre, description, technique,
-                    dimensions, annee, prix, image):
-    with connexion() as con:
+def ajouter_oeuvre(data):
+    with db() as con:
         con.execute("""
-            INSERT INTO tableaux
-            (titre, description, technique, dimensions,
-             annee, prix, image)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        """, (titre, description, technique,
-              dimensions, annee, prix, image))
+        INSERT INTO oeuvres
+        (titre, description, technique,
+         dimensions, annee, prix, image)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, data)
 
-def supprimer_tableau(id_tableau):
-    with connexion() as con:
-        resultat = con.execute(
-            "SELECT image FROM tableaux WHERE id = ?",
-            (id_tableau,)
+def supprimer_oeuvre(identifiant):
+    with db() as con:
+        result = con.execute(
+            "SELECT image FROM oeuvres WHERE id=?",
+            (identifiant,)
         ).fetchone()
 
         con.execute(
-            "DELETE FROM tableaux WHERE id = ?",
-            (id_tableau,)
+            "DELETE FROM oeuvres WHERE id=?",
+            (identifiant,)
         )
 
-    if resultat:
-        chemin = DOSSIER / resultat[0]
-        if chemin.exists():
-            chemin.unlink()
+    if result:
+        fichier = DOSSIER / result[0]
+        if fichier.exists():
+            fichier.unlink()
 
 initialiser()
 
-# STYLE
+# ==========================================
+# STYLE GRAPHIQUE
+# ==========================================
+
 st.markdown("""
 <style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Playfair+Display:wght@600;700&display=swap');
+
 .stApp {
-    background-color: #faf8f5;
+    background: #faf9f6;
+    color: #22232a;
+    font-family: 'DM Sans', sans-serif;
 }
 h1, h2, h3 {
-    color: #38302c;
+    font-family: 'Playfair Display', serif !important;
 }
-.legende {
-    color: #897d73;
-    text-align: center;
+.hero {
+    background: linear-gradient(120deg,#171923,#37304b);
+    color: white;
+    padding: 55px 35px;
+    border-radius: 18px;
+    margin-bottom: 25px;
+}
+.hero h1 {
+    color: white !important;
+    font-size: 52px !important;
+}
+.hero p {
+    color: #e4d9f0;
+    font-size: 18px;
+}
+.oeuvre {
+    background: white;
+    border-radius: 14px;
+    padding: 15px;
+    margin-bottom: 20px;
+    border: 1px solid #ece8e1;
+}
+.prix {
+    color: #c34e37;
+    font-weight: bold;
+}
+footer {
+    visibility: hidden;
+}
+.stButton button {
+    border-radius: 10px;
+    background: #25263a;
+    color: white;
 }
 </style>
 """, unsafe_allow_html=True)
 
-# MENU
-st.sidebar.title("🎨 Ma Galerie")
-page = st.sidebar.radio(
+# ==========================================
+# NAVIGATION
+# ==========================================
+
+st.markdown("""
+<div style="display:flex;justify-content:space-between;
+align-items:center;padding:12px 0;">
+<h2 style="margin:0;color:#22232a;">LUCAS ART.</h2>
+<span style="color:#8b8178;font-size:12px;">
+GALERIE D'ART CONTEMPORAIN
+</span>
+</div>
+""", unsafe_allow_html=True)
+
+page = st.radio(
     "Navigation",
-    ["Accueil", "Galerie", "À propos", "Contact", "Administration"]
+    ["Accueil", "Mes œuvres", "À propos", "Contact"],
+    horizontal=True,
+    label_visibility="collapsed"
 )
 
+st.divider()
+
+# ==========================================
 # ACCUEIL
+# ==========================================
+
 if page == "Accueil":
 
-    st.title("Bienvenue dans mon univers artistique")
-    st.subheader("Des œuvres uniques, créées avec passion.")
+    st.markdown("""
+    <div class="hero">
+        <p>BIENVENUE DANS MON UNIVERS</p>
+        <h1>LUCAS ART.</h1>
+        <p>L'art est une émotion.<br>
+        Découvrez mes peintures et mes créations originales.</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-    st.markdown("---")
+    st.title("Les dernières créations")
 
-    tableaux = recuperer_tableaux()
+    oeuvres = liste_oeuvres()
 
-    if tableaux:
-        st.subheader("Quelques-unes de mes créations")
-
-        cols = st.columns(3)
-
-        for i, tableau in enumerate(tableaux[:3]):
-            with cols[i]:
-                chemin = DOSSIER / tableau[7]
-                if chemin.exists():
-                    st.image(str(chemin), use_container_width=True)
-                st.markdown(f"**{tableau[1]}**")
-                st.caption(tableau[3])
-
-    else:
-        st.info("La galerie sera bientôt enrichie de nouvelles œuvres.")
-
-# GALERIE
-elif page == "Galerie":
-
-    st.title("Ma collection")
-    tableaux = recuperer_tableaux()
-
-    if not tableaux:
-        st.info("Aucun tableau disponible pour le moment.")
-    else:
+    if oeuvres:
         colonnes = st.columns(3)
 
-        for i, tableau in enumerate(tableaux):
-            with colonnes[i % 3]:
-                chemin = DOSSIER / tableau[7]
+        for i, o in enumerate(oeuvres[:3]):
+            with colonnes[i]:
+                chemin = DOSSIER / o[7]
+                if chemin.exists():
+                    st.image(str(chemin), use_container_width=True)
+                st.subheader(o[1])
+                st.caption(o[3])
+                if o[6]:
+                    st.markdown(
+                        f'<p class="prix">{html.escape(o[6])}</p>',
+                        unsafe_allow_html=True
+                    )
+    else:
+        st.info("Les premières œuvres seront bientôt exposées.")
+
+    st.markdown("---")
+    st.title("L'art sous toutes ses couleurs")
+    st.write(
+        "Chaque création possède son histoire, "
+        "sa personnalité et son émotion."
+    )
+
+    if st.button("Découvrir toute la galerie"):
+        st.session_state["page"] = "Mes œuvres"
+        st.rerun()
+
+# ==========================================
+# GALERIE
+# ==========================================
+
+elif page == "Mes œuvres":
+
+    st.title("Ma galerie")
+    st.write("Découvrez toutes mes créations.")
+
+    oeuvres = liste_oeuvres()
+
+    if not oeuvres:
+        st.info("La galerie est actuellement en préparation.")
+
+    for debut in range(0, len(oeuvres), 3):
+        colonnes = st.columns(3)
+
+        for col, o in zip(colonnes, oeuvres[debut:debut+3]):
+            with col:
+                chemin = DOSSIER / o[7]
 
                 if chemin.exists():
-                    st.image(
-                        str(chemin),
-                        use_container_width=True
+                    st.image(str(chemin), use_container_width=True)
+
+                st.subheader(o[1])
+
+                if o[6]:
+                    st.markdown(
+                        f'<p class="prix">{html.escape(o[6])}</p>',
+                        unsafe_allow_html=True
                     )
 
-                st.subheader(tableau[1])
-                st.write(tableau[2])
-                st.caption(
-                    f"{tableau[3]} | {tableau[4]} | {tableau[5]}"
-                )
+                with st.expander("Découvrir cette œuvre"):
+                    st.write(o[2])
+                    st.write("Technique :", o[3])
+                    st.write("Dimensions :", o[4])
+                    st.write("Année :", o[5])
 
-                if tableau[6]:
-                    st.write(f"Prix : {tableau[6]}")
+                    if EMAIL:
+                        sujet = quote("Demande concernant : " + o[1])
+                        message = quote(
+                            "Bonjour, je souhaite obtenir "
+                            "des renseignements sur cette œuvre."
+                        )
+                        st.link_button(
+                            "Demander des renseignements",
+                            f"mailto:{EMAIL}?subject={sujet}&body={message}"
+                        )
 
-                with st.expander("Voir les détails"):
-                    st.write(tableau[2])
-                    st.write(f"Technique : {tableau[3]}")
-                    st.write(f"Dimensions : {tableau[4]}")
-                    st.write(f"Année : {tableau[5]}")
+# ==========================================
+# A PROPOS
+# ==========================================
 
-# À PROPOS
 elif page == "À propos":
 
-    st.title("À propos de l'artiste")
+    st.title("À propos de LUCAS ART")
 
-    st.write("""
-    Bienvenue dans mon univers artistique.
+    st.markdown("""
+    ### Un univers artistique personnel
 
-    Je vous invite à découvrir mes peintures,
-    mes inspirations et mon travail artistique.
+    Bienvenue dans mon univers.
 
-    Chaque tableau est une création unique,
-    réalisée avec passion et sensibilité.
+    À travers mes peintures, je souhaite partager
+    ma passion pour les couleurs, les formes,
+    les matières et les émotions.
+
+    Chaque tableau est une invitation à découvrir
+    une nouvelle sensibilité artistique.
+
+    Merci de votre visite et de votre intérêt
+    pour mon travail.
     """)
 
+# ==========================================
 # CONTACT
+# ==========================================
+
 elif page == "Contact":
 
-    st.title("Me contacter")
+    st.title("Entrons en contact")
 
-    st.write("Une œuvre vous intéresse ? Contactez-moi.")
+    st.write("""
+    Une peinture vous intéresse ?
+    Vous souhaitez connaître sa disponibilité
+    ou obtenir davantage de renseignements ?
+    """)
 
-    if CONTACT_EMAIL:
+    if EMAIL:
         st.link_button(
-            "M'envoyer un email",
-            f"mailto:{CONTACT_EMAIL}"
+            "✉ Contacter LUCAS ART",
+            "mailto:" + EMAIL + "?subject=" + quote(
+                "Contact depuis LUCAS ART"
+            )
         )
     else:
-        st.info("L'adresse email de contact sera configurée prochainement.")
+        st.info("Adresse de contact en cours de configuration.")
 
+# ==========================================
 # ADMINISTRATION
-elif page == "Administration":
+# ==========================================
 
-    st.title("Administration de la galerie")
+st.divider()
+
+with st.expander("🔐 Espace administrateur"):
 
     if not ADMIN_PASSWORD:
         st.error(
-            "Configurez la variable ADMIN_PASSWORD "
-            "avant d'utiliser l'administration."
+            "L'administration n'est pas configurée. "
+            "Définissez ADMIN_PASSWORD."
         )
-        st.stop()
-
-    mot_de_passe = st.text_input(
-        "Mot de passe administrateur",
-        type="password"
-    )
-
-    if mot_de_passe != ADMIN_PASSWORD:
-        st.warning("Accès réservé à l'administrateur.")
-        st.stop()
-
-    st.success("Bienvenue dans votre espace administrateur.")
-
-    st.subheader("Ajouter un tableau")
-
-    with st.form("ajout_tableau"):
-        titre = st.text_input("Titre du tableau")
-        description = st.text_area("Description")
-        technique = st.text_input("Technique (huile, acrylique...)")
-        dimensions = st.text_input("Dimensions")
-        annee = st.text_input("Année de création")
-        prix = st.text_input("Prix")
-
-        fichier = st.file_uploader(
-            "Photographie du tableau",
-            type=["jpg", "jpeg", "png", "webp"]
+    else:
+        password = st.text_input(
+            "Mot de passe",
+            type="password",
+            key="admin_password"
         )
 
-        envoyer = st.form_submit_button("Ajouter à la galerie")
+        if password and password == ADMIN_PASSWORD:
 
-        if envoyer:
-            if not titre or not fichier:
-                st.error("Le titre et la photographie sont obligatoires.")
-            else:
-                try:
-                    image = Image.open(fichier)
-                    image.verify()
+            st.success("Accès administrateur autorisé.")
 
-                    extension = fichier.type.split("/")[-1]
-                    if extension == "jpeg":
-                        extension = "jpg"
+            st.subheader("Ajouter une œuvre")
 
-                    nom_image = f"{os.urandom(12).hex()}.{extension}"
+            with st.form("nouvelle_oeuvre"):
 
-                    fichier.seek(0)
-                    image = Image.open(fichier).convert("RGB")
-                    image.thumbnail((2400, 2400))
-                    image.save(DOSSIER / nom_image, quality=90)
+                titre = st.text_input("Titre du tableau")
+                description = st.text_area("Description")
+                technique = st.text_input(
+                    "Technique : huile, acrylique, etc."
+                )
+                dimensions = st.text_input(
+                    "Dimensions : 50 x 70 cm"
+                )
+                annee = st.text_input("Année de création")
+                prix = st.text_input("Prix : exemple 250 €")
 
-                    ajouter_tableau(
-                        titre, description, technique,
-                        dimensions, annee, prix, nom_image
-                    )
+                fichier = st.file_uploader(
+                    "Photographie du tableau",
+                    type=["jpg", "jpeg", "png", "webp"]
+                )
 
-                    st.success("Tableau ajouté avec succès !")
-                    st.rerun()
+                valider = st.form_submit_button("Publier l'œuvre")
 
-                except Exception:
-                    st.error("Impossible de traiter cette image.")
+                if valider:
 
-    st.markdown("---")
-    st.subheader("Gérer les tableaux")
+                    if not titre or fichier is None:
+                        st.error("Le titre et la photo sont obligatoires.")
 
-    for tableau in recuperer_tableaux():
-        col1, col2 = st.columns([4, 1])
+                    else:
+                        try:
+                            image = Image.open(fichier)
+                            image.verify()
 
-        with col1:
-            st.write(f"**{tableau[1]}**")
+                            fichier.seek(0)
+                            image = Image.open(fichier).convert("RGB")
+                            image.thumbnail((2400, 2400))
 
-        with col2:
-            if st.button("Supprimer", key=f"sup_{tableau[0]}"):
-                supprimer_tableau(tableau[0])
-                st.rerun()
+                            nom = uuid.uuid4().hex + ".jpg"
+                            image.save(
+                                DOSSIER / nom,
+                                format="JPEG",
+                                quality=90
+                            )
+
+                            ajouter_oeuvre((
+                                titre, description, technique,
+                                dimensions, annee, prix, nom
+                            ))
+
+                            st.success("Œuvre publiée !")
+                            st.rerun()
+
+                        except Exception:
+                            st.error("Le fichier image est invalide.")
+
+            st.divider()
+            st.subheader("Gérer les œuvres")
+
+            for o in liste_oeuvres():
+                gauche, droite = st.columns([4, 1])
+
+                with gauche:
+                    st.write("**" + o[1] + "**")
+
+                with droite:
+                    if st.button("Supprimer", key=f"del_{o[0]}"):
+                        supprimer_oeuvre(o[0])
+                        st.rerun()
+
+        elif password:
+            st.error("Mot de passe incorrect.")
+
+# ==========================================
+# PIED DE PAGE
+# ==========================================
+
+st.markdown("---")
+st.markdown(
+    "<center style='color:#8b8178'>"
+    "© 2026 LUCAS ART — Tous droits réservés"
+    "</center>",
+    unsafe_allow_html=True
+)
